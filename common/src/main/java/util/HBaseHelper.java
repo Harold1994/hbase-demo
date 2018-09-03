@@ -1,17 +1,33 @@
 package util;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.*;
-import org.apache.hadoop.hbase.client.*;
-import org.apache.hadoop.hbase.util.Bytes;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.NamespaceDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.util.Bytes;
+
+/**
+ * Used by the book examples to generate tables and fill them with test data.
+ */
 public class HBaseHelper implements Closeable {
+
     private Configuration configuration = null;
     private Connection connection = null;
     private Admin admin = null;
@@ -30,17 +46,16 @@ public class HBaseHelper implements Closeable {
         connection.close();
     }
 
-    public Configuration getConfiguration() {
-        return configuration;
-    }
-
     public Connection getConnection() {
         return connection;
     }
 
-    public void createNameSpace(String namespace) {
+    public Configuration getConfiguration() {
+        return configuration;
+    }
+
+    public void createNamespace(String namespace) {
         try {
-            //namespace命名空间指对一组表的逻辑分组，类似RDBMS中的database
             NamespaceDescriptor nd = NamespaceDescriptor.create(namespace).build();
             admin.createNamespace(nd);
         } catch (Exception e) {
@@ -48,16 +63,17 @@ public class HBaseHelper implements Closeable {
         }
     }
 
-    public void dropNameSpace(String namespace, boolean force) {
+    public void dropNamespace(String namespace, boolean force) {
         try {
             if (force) {
-                TableName [] tableNames = admin.listTableNamesByNamespace(namespace);
+                TableName[] tableNames = admin.listTableNamesByNamespace(namespace);
                 for (TableName name : tableNames) {
                     admin.disableTable(name);
                     admin.deleteTable(name);
                 }
             }
         } catch (Exception e) {
+            // ignore
         }
         try {
             admin.deleteNamespace(namespace);
@@ -66,20 +82,24 @@ public class HBaseHelper implements Closeable {
         }
     }
 
-    public boolean existsTable(String table) throws IOException {
+    public boolean existsTable(String table)
+            throws IOException {
         return existsTable(TableName.valueOf(table));
     }
 
-    private boolean existsTable(TableName tableName) throws IOException {
-        return admin.tableExists(tableName);
+    public boolean existsTable(TableName table)
+            throws IOException {
+        return admin.tableExists(table);
     }
 
-    public void createTable(String table, String... colfams) throws IOException {
+    public void createTable(String table, String... colfams)
+            throws IOException {
         createTable(TableName.valueOf(table), 1, null, colfams);
     }
 
-    public void createTable(TableName table, String... colfams) throws IOException {
-        createTable(table,1,null,colfams);
+    public void createTable(TableName table, String... colfams)
+            throws IOException {
+        createTable(table, 1, null, colfams);
     }
 
     public void createTable(String table, int maxVersions, String... colfams)
@@ -97,16 +117,19 @@ public class HBaseHelper implements Closeable {
         createTable(TableName.valueOf(table), 1, splitKeys, colfams);
     }
 
-
-    public void createTable(TableName table, int maxVersion,byte[][] splitKeys, String... colfams) throws IOException {
+    public void createTable(TableName table, int maxVersions, byte[][] splitKeys,
+                            String... colfams)
+            throws IOException {
         HTableDescriptor desc = new HTableDescriptor(table);
         for (String cf : colfams) {
             HColumnDescriptor coldef = new HColumnDescriptor(cf);
-            coldef.setMaxVersions(maxVersion);
+            coldef.setMaxVersions(maxVersions);
             desc.addFamily(coldef);
         }
         if (splitKeys != null) {
-            admin.createTable(desc,splitKeys);
+            admin.createTable(desc, splitKeys);
+        } else {
+            admin.createTable(desc);
         }
     }
 
@@ -124,11 +147,11 @@ public class HBaseHelper implements Closeable {
 
     public void dropTable(TableName table) throws IOException {
         if (existsTable(table)) {
-            if (admin.isTableAvailable(table))
-                disableTable(table);
+            if (admin.isTableEnabled(table)) disableTable(table);
             admin.deleteTable(table);
         }
     }
+
     public void fillTable(String table, int startRow, int endRow, int numCols,
                           String... colfams)
             throws IOException {
@@ -176,20 +199,23 @@ public class HBaseHelper implements Closeable {
                 setTimestamp, random, colfams);
     }
 
-
     public void fillTable(TableName table, int startRow, int endRow, int numCols,
                           int pad, boolean setTimestamp, boolean random,
-                          String... colfams) throws IOException {
+                          String... colfams)
+            throws IOException {
         Table tbl = connection.getTable(table);
         Random rnd = new Random();
-        for (int row = startRow; row<=endRow; row++) {
-            for (int col = 1; col<numCols; col++) {
+        for (int row = startRow; row <= endRow; row++) {
+            for (int col = 1; col <= numCols; col++) {
                 Put put = new Put(Bytes.toBytes("row-" + padNum(row, pad)));
-                for(String cf : colfams) {
-                    String colName = "col-" + padNum(col,pad);
-                    String val = "val-" + (random ? Integer.toString(rnd.nextInt(numCols)):padNum(row, pad) + "." + padNum(col, pad));
-                    if (setTimestamp){
-                        put.addColumn(Bytes.toBytes(cf), Bytes.toBytes(colName), Bytes.toBytes(val));
+                for (String cf : colfams) {
+                    String colName = "col-" + padNum(col, pad);
+                    String val = "val-" + (random ?
+                            Integer.toString(rnd.nextInt(numCols)) :
+                            padNum(row, pad) + "." + padNum(col, pad));
+                    if (setTimestamp) {
+                        put.addColumn(Bytes.toBytes(cf), Bytes.toBytes(colName), col,
+                                Bytes.toBytes(val));
                     } else {
                         put.addColumn(Bytes.toBytes(cf), Bytes.toBytes(colName),
                                 Bytes.toBytes(val));
@@ -244,7 +270,6 @@ public class HBaseHelper implements Closeable {
         tbl.close();
     }
 
-
     public String padNum(int num, int pad) {
         String res = Integer.toString(num);
         if (pad > 0) {
@@ -260,10 +285,26 @@ public class HBaseHelper implements Closeable {
         put(TableName.valueOf(table), row, fam, qual, val);
     }
 
-    public void put(TableName table, String row, String fam, String qual, String val) throws IOException {
+    public void put(TableName table, String row, String fam, String qual,
+                    String val) throws IOException {
         Table tbl = connection.getTable(table);
         Put put = new Put(Bytes.toBytes(row));
         put.addColumn(Bytes.toBytes(fam), Bytes.toBytes(qual), Bytes.toBytes(val));
+        tbl.put(put);
+        tbl.close();
+    }
+
+    public void put(String table, String row, String fam, String qual, long ts,
+                    String val) throws IOException {
+        put(TableName.valueOf(table), row, fam, qual, ts, val);
+    }
+
+    public void put(TableName table, String row, String fam, String qual, long ts,
+                    String val) throws IOException {
+        Table tbl = connection.getTable(table);
+        Put put = new Put(Bytes.toBytes(row));
+        put.addColumn(Bytes.toBytes(fam), Bytes.toBytes(qual), ts,
+                Bytes.toBytes(val));
         tbl.put(put);
         tbl.close();
     }
@@ -273,7 +314,6 @@ public class HBaseHelper implements Closeable {
         put(TableName.valueOf(table), rows, fams, quals, ts, vals);
     }
 
-
     public void put(TableName table, String[] rows, String[] fams, String[] quals,
                     long[] ts, String[] vals) throws IOException {
         Table tbl = connection.getTable(table);
@@ -282,8 +322,8 @@ public class HBaseHelper implements Closeable {
             for (String fam : fams) {
                 int v = 0;
                 for (String qual : quals) {
-                    String val  = vals[v < vals.length? v : vals.length -1];
-                    long t = ts[v < ts.length ? v : ts.length-1];
+                    String val = vals[v < vals.length ? v : vals.length - 1];
+                    long t = ts[v < ts.length ? v : ts.length - 1];
                     System.out.println("Adding: " + row + " " + fam + " " + qual +
                             " " + t + " " + val);
                     put.addColumn(Bytes.toBytes(fam), Bytes.toBytes(qual), t,
@@ -295,12 +335,14 @@ public class HBaseHelper implements Closeable {
         }
         tbl.close();
     }
+
     public void dump(String table, String[] rows, String[] fams, String[] quals)
             throws IOException {
         dump(TableName.valueOf(table), rows, fams, quals);
     }
 
-    public void dump(TableName table, String[] rows, String[] fams, String [] quals) throws IOException {
+    public void dump(TableName table, String[] rows, String[] fams, String[] quals)
+            throws IOException {
         Table tbl = connection.getTable(table);
         List<Get> gets = new ArrayList<Get>();
         for (String row : rows) {
@@ -315,7 +357,7 @@ public class HBaseHelper implements Closeable {
             }
             gets.add(get);
         }
-        Result [] results = tbl.get(gets);
+        Result[] results = tbl.get(gets);
         for (Result result : results) {
             for (Cell cell : result.rawCells()) {
                 System.out.println("Cell: " + cell +
@@ -323,7 +365,7 @@ public class HBaseHelper implements Closeable {
                         cell.getValueOffset(), cell.getValueLength()));
             }
         }
-       tbl.close();
+        tbl.close();
     }
 
     public void dump(String table) throws IOException {
@@ -331,13 +373,17 @@ public class HBaseHelper implements Closeable {
     }
 
     public void dump(TableName table) throws IOException {
+
             Table t = connection.getTable(table);
             ResultScanner scanner = t.getScanner(new Scan());
+
             for (Result result : scanner) {
                 dumpResult(result);
             }
+            scanner.close();
             t.close();
     }
+
     public void dumpResult(Result result) {
         for (Cell cell : result.rawCells()) {
             System.out.println("Cell: " + cell +
@@ -346,4 +392,3 @@ public class HBaseHelper implements Closeable {
         }
     }
 }
-
