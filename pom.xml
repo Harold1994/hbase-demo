@@ -11,6 +11,7 @@
     <modules>
         <module>ch03_basic</module>
         <module>common</module>
+        <module>ch04_advanced</module>
     </modules>
     <properties>
         <hadoop.version>2.7.2</hadoop.version>
