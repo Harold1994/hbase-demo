@@ -8,6 +8,7 @@
         <outputRelativeToContentRoot value="true" />
         <module name="ch03_basic" />
         <module name="ch04_advanced" />
+        <module name="common" />
         <module name="hbase-book-common" />
       </profile>
     </annotationProcessing>
