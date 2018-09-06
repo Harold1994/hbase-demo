@@ -3,10 +3,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
-import org.apache.hadoop.hbase.filter.ByteArrayComparable;
-import org.apache.hadoop.hbase.filter.CompareFilter;
-import org.apache.hadoop.hbase.filter.DependentColumnFilter;
-import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.*;
 import org.apache.hadoop.hbase.util.Bytes;
 import util.HBaseHelper;
 
@@ -68,6 +65,7 @@ public class DependentColumnFilterExample {
         Connection connection = ConnectionFactory.createConnection(conf);
         table = connection.getTable(TableName.valueOf("testtable"));
 
+        filter(false, CompareFilter.CompareOp.EQUAL,new RegexStringComparator(".*\\.5"));
 
 
     }
